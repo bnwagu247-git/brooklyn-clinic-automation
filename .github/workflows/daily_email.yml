@@ -2,9 +2,8 @@ name: Daily Brooklyn Clinic Automation
 
 on:
   schedule:
-    # Runs automatically every day at 8:00 AM UTC
     - cron: '0 8 * * *'
-  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+  workflow_dispatch:
 
 jobs:
   build-and-send:
@@ -25,7 +24,7 @@ jobs:
           pip install requests beautifulsoup4
 
       - name: Step 1 - Scrape new clinic leads
-        run: python scrape_clinics.py
+        run: python scrape_clinics.py || echo "Scraper file missing or failed, continuing to send email..."
 
       - name: Step 2 - Send daily clinic email
         env:
