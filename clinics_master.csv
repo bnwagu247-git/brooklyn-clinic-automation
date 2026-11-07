@@ -1,10 +1,8 @@
-company,first,last,email
-Institute for Community Living (ICL),General,Support,iclhope@iclinc.org
-Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org
-Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com
-SIMHA Health,Office,Team,office@simhahealth.org
-Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com
-Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.orgWilliamsburgtherapygroup Mental Health,Director,Intake,info@williamsburgtherapygroup.com
-Psychologytoday Mental Health,Director,Intake,johnthomas@psychologytoday.com
-Psychologytoday Mental Health,Director,Intake,aberman@psychologytoday.com
-Psychologytoday Mental Health,Director,Intake,diana@psychologytoday.com
+company,first,last,email,category,website,source,date_added,sent_date
+Institute for Community Living (ICL),General,Support,iclhope@iclinc.org,,,manual,,
+Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org,,,manual,,
+Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com,,,manual,,
+SIMHA Health,Office,Team,office@simhahealth.org,,,manual,,
+Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com,,,manual,,
+Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.org,,,manual,,
+Williamsburg Therapy Group,,,info@williamsburgtherapygroup.com,,,manual,,

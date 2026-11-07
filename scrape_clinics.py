@@ -1,149 +1,337 @@
-import csv
+"""Find Brooklyn mental health clinic emails, categorize them, store in clinics_master.csv.
+
+Sources:
+  1. seed_sites.txt  - clinic websites (one per line) or directories ("dir: <url>")
+  2. Google Places   - optional, used when GOOGLE_PLACES_API_KEY is set
+Each clinic site is crawled politely (robots.txt, delay, a few contact-type pages).
+"""
+import datetime
 import os
 import re
-from urllib.parse import urljoin, urlparse
-from bs4 import BeautifulSoup
+import sys
+import time
+from urllib import robotparser
+from urllib.parse import unquote, urljoin, urlparse
+
 import requests
+from bs4 import BeautifulSoup
 
-HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
-        ' like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    )
-}
+from clinic_store import EMAIL_RE, classify, load_rows, save_rows
 
-EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-CONTACT_KEYWORDS = ['contact', 'about', 'team', 'staff', 'reach', 'directory']
+BOT_NAME = 'BrooklynLeadsBot'
+HEADERS = {'User-Agent': f'{BOT_NAME}/1.0 (small-scale lead research)'}
+DELAY = 1.0
+TIMEOUT = 12
+MAX_PAGES_PER_SITE = 4
+MAX_SITES_PER_RUN = 60
+MAX_ENRICH_PER_RUN = 40
+MAX_EMAILS_PER_SITE = 3
+PLACES_QUERIES_PER_RUN = 3
 
+CONTACT_HINTS = ('contact', 'about', 'team', 'staff', 'people', 'reach', 'connect')
+IMG_EXT = ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.css', '.js')
+JUNK_LOCALS = {'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'webmaster',
+               'privacy', 'abuse', 'postmaster', 'sentry', 'user', 'name', 'email'}
+JUNK_DOMAINS = {'example.com', 'domain.com', 'email.com', 'yoursite.com', 'sentry.io',
+                'wixpress.com', 'sentry-next.wixpress.com', 'mysite.com'}
+FREE_MAIL = {'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com',
+             'icloud.com', 'protonmail.com', 'me.com'}
+SOCIAL = {'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com',
+          'youtube.com', 'tiktok.com', 'google.com', 'yelp.com', 'apple.com', 'wa.me'}
+GENERIC_LOCALS = {'info', 'contact', 'hello', 'office', 'intake', 'admin', 'admissions',
+                  'appointments', 'frontdesk', 'inquiries', 'care', 'support', 'help', 'team'}
 
-def extract_emails_from_url(url):
-  """Fetches a web page and extracts all unique valid email addresses."""
-  emails = set()
-  try:
-    response = requests.get(url, headers=HEADERS, timeout=10)
-    if response.status_code != 200:
-      return emails
-
-    # Search raw text using regex
-    found_emails = re.findall(EMAIL_REGEX, response.text)
-    for email in found_emails:
-      clean_email = email.lower().strip()
-      if not clean_email.endswith(
-          ('.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp', '.css', '.js')
-      ):
-        if (
-            'example' not in clean_email
-            and 'domain' not in clean_email
-            and 'sentry' not in clean_email
-        ):
-          emails.add(clean_email)
-
-    # Search explicit mailto links
-    soup = BeautifulSoup(response.text, 'html.parser')
-    for a_tag in soup.find_all('a', href=True):
-      href = a_tag['href']
-      if href.startswith('mailto:'):
-        mail = href.replace('mailto:', '').split('?')[0].strip().lower()
-        if re.match(EMAIL_REGEX, mail) and 'example' not in mail:
-          emails.add(mail)
-
-  except Exception as e:
-    print(f'   └─ Could not scan {url}: {e}')
-
-  return emails
+PLACES_QUERIES = [
+    'mental health clinic in Brooklyn, NY',
+    'psychotherapy practice in Brooklyn, NY',
+    'psychiatrist in Brooklyn, NY',
+    'child and adolescent therapy in Brooklyn, NY',
+    'substance abuse treatment in Brooklyn, NY',
+    'couples therapy in Brooklyn, NY',
+    'trauma therapy EMDR in Brooklyn, NY',
+    'autism ADHD evaluation in Brooklyn, NY',
+    'community mental health center in Brooklyn, NY',
+]
 
 
-def scrape_directory_page(directory_url):
-  """Scrapes directory and listing pages for multiple clinic and provider emails."""
-  print(f'\nScanning Directory: {directory_url}')
-  found_leads = []
-
-  try:
-    response = requests.get(directory_url, headers=HEADERS, timeout=10)
-    if response.status_code != 200:
-      return found_leads
-
-    soup = BeautifulSoup(response.text, 'html.parser')
-
-    # Find all links on the directory page to explore individual clinic sites or cards
-    domain = urlparse(directory_url).netloc
-    emails_on_page = extract_emails_from_url(directory_url)
-
-    for email in emails_on_page:
-      # Derive clean company name from email domain or fallback
-      domain_part = email.split('@')[-1]
-      comp_name = (
-          domain_part.split('.')[0].capitalize() + ' Mental Health Clinic'
-      )
-      found_leads.append({
-          'company': comp_name,
-          'first': 'Director',
-          'last': 'Intake',
-          'email': email,
-      })
-
-  except Exception as e:
-    print(f'Failed to scan directory {directory_url}: {e}')
-
-  return found_leads
+# ---------- helpers ----------
+def base_domain(value):
+    host = urlparse(value if '//' in value else '//' + value).netloc or value
+    host = host.split('@')[-1].split(':')[0].lower()
+    parts = host.split('.')
+    return '.'.join(parts[-2:]) if len(parts) >= 2 else host
 
 
-def append_to_master_csv(new_leads, filename='clinics_master.csv'):
-  """Appends unique leads, avoiding duplicates."""
-  file_exists = os.path.exists(filename)
-  existing_emails = set()
+_robots = {}
 
-  if file_exists:
-    with open(filename, mode='r', encoding='utf-8-sig') as f:
-      reader = csv.DictReader(f)
-      for row in reader:
-        for val in row.values():
-          if val and '@' in val:
-            existing_emails.add(val.strip().lower())
 
-  added_count = 0
-  fieldnames = ['company', 'first', 'last', 'email']
+def allowed(url):
+    p = urlparse(url)
+    base = f'{p.scheme}://{p.netloc}'
+    rp = _robots.get(base)
+    if rp is None:
+        rp = robotparser.RobotFileParser()
+        try:
+            r = requests.get(base + '/robots.txt', headers=HEADERS, timeout=8)
+            rp.parse(r.text.splitlines() if r.status_code == 200 else [])
+        except requests.RequestException:
+            rp.parse([])
+        _robots[base] = rp
+    return rp.can_fetch(BOT_NAME, url)
 
-  with open(filename, mode='a', newline='', encoding='utf-8') as f:
-    writer = csv.DictWriter(f, fieldnames=fieldnames)
 
-    if not file_exists or os.stat(filename).st_size == 0:
-      writer.writeheader()
+def fetch_soup(url):
+    if not allowed(url):
+        print(f'   x {url}: disallowed by robots.txt')
+        return None
+    time.sleep(DELAY)
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+    except requests.RequestException as e:
+        print(f'   x {url}: {e}')
+        return None
+    if r.status_code != 200 or 'html' not in r.headers.get('Content-Type', ''):
+        print(f'   x {url}: HTTP {r.status_code}')
+        return None
+    return BeautifulSoup(r.text, 'html.parser')
 
-    for lead in new_leads:
-      email_clean = lead['email'].lower()
-      if email_clean not in existing_emails:
-        writer.writerow(lead)
-        existing_emails.add(email_clean)
-        added_count += 1
 
-  print(
-      f'\nSuccessfully added {added_count} new unique leads to {filename}.'
-  )
+def decode_cf(hexstr):
+    """Decode Cloudflare's email obfuscation (data-cfemail)."""
+    key = int(hexstr[:2], 16)
+    return ''.join(chr(int(hexstr[i:i + 2], 16) ^ key) for i in range(2, len(hexstr), 2))
+
+
+def clean_email(e):
+    e = e.lower().strip('.,;:<>()[]"\' ')
+    if not EMAIL_RE.fullmatch(e) or e.endswith(IMG_EXT):
+        return None
+    local, domain = e.rsplit('@', 1)
+    if local in JUNK_LOCALS or domain in JUNK_DOMAINS:
+        return None
+    if len(domain.rsplit('.', 1)[1]) > 6:  # catches "...orgCall" glue
+        return None
+    return e
+
+
+def extract_emails(soup):
+    """Emails from mailto links, Cloudflare-protected spans, JSON-LD and visible text.
+    NOTE: removes script/style tags from the soup."""
+    found = set()
+    for a in soup.find_all('a', href=True):
+        if a['href'].lower().startswith('mailto:'):
+            found.update(EMAIL_RE.findall(unquote(a['href'][7:].split('?')[0])))
+    for el in soup.select('[data-cfemail]'):
+        try:
+            found.add(decode_cf(el['data-cfemail']))
+        except ValueError:
+            pass
+    for s in soup.find_all('script', type='application/ld+json'):
+        found.update(EMAIL_RE.findall(s.get_text()))
+    for s in soup(['script', 'style', 'noscript']):
+        s.decompose()
+    found.update(EMAIL_RE.findall(soup.get_text(' ', strip=True)))
+    return {e for e in map(clean_email, found) if e}
+
+
+def site_name(soup, url):
+    meta = soup.find('meta', property='og:site_name')
+    if meta and meta.get('content', '').strip():
+        return meta['content'].strip()
+    stem = base_domain(url).split('.')[0]
+    if soup.title and soup.title.string:
+        parts = [p.strip() for p in re.split(r'\s[|\-\u2013\u2014\u2022:]\s', soup.title.string.strip()) if p.strip()]
+        for p in parts:
+            if stem in re.sub(r'[^a-z0-9]', '', p.lower()):
+                return p
+        if parts:
+            return parts[0]
+    return stem.title()
+
+
+def strong_text(soup):
+    bits = []
+    if soup.title and soup.title.string:
+        bits.append(soup.title.string)
+    meta = soup.find('meta', attrs={'name': 'description'})
+    if meta and meta.get('content'):
+        bits.append(meta['content'])
+    bits += [t.get_text(' ', strip=True) for t in soup.find_all(['h1', 'h2', 'nav'])]
+    return ' '.join(bits)
+
+
+def crawl_site(url, max_pages=MAX_PAGES_PER_SITE):
+    home = fetch_soup(url)
+    if home is None:
+        return None
+    name, strong = site_name(home, url), strong_text(home)
+    dom = base_domain(url)
+    todo = []
+    for a in home.find_all('a', href=True):
+        link = urljoin(url, a['href']).split('#')[0]
+        p = urlparse(link)
+        if (p.scheme in ('http', 'https') and base_domain(p.netloc) == dom
+                and link not in todo and link.rstrip('/') != url.rstrip('/')
+                and any(h in (link + ' ' + a.get_text(' ')).lower() for h in CONTACT_HINTS)):
+            todo.append(link)
+    pages = [home] + [s for s in (fetch_soup(l) for l in todo[:max_pages - 1]) if s is not None]
+    emails, texts = set(), []
+    for page in pages:
+        emails |= extract_emails(page)
+        texts.append(page.get_text(' ', strip=True))
+    body = ' '.join(texts)
+    brooklyn = 'brooklyn' in body.lower() or bool(re.search(r'\b112[0-5]\d\b', body))
+    return {'name': name, 'emails': emails, 'strong': strong, 'body': body[:20000], 'brooklyn': brooklyn}
+
+
+def pick_emails(emails, url):
+    dom = base_domain(url)
+    own = [e for e in emails if base_domain(e.split('@')[1]) == dom]
+    pool = own or [e for e in emails if e.split('@')[1] in FREE_MAIL]
+    pool.sort(key=lambda e: (e.split('@')[0] not in GENERIC_LOCALS, e))
+    return pool[:MAX_EMAILS_PER_SITE]
+
+
+# ---------- discovery ----------
+def directory_links(url):
+    """Outbound links of a directory page, treated as candidate clinic sites."""
+    soup = fetch_soup(url)
+    if soup is None:
+        return []
+    skip = SOCIAL | {base_domain(url)}
+    out = []
+    for a in soup.find_all('a', href=True):
+        p = urlparse(urljoin(url, a['href']))
+        if p.scheme in ('http', 'https') and base_domain(p.netloc) not in skip:
+            root = f'{p.scheme}://{p.netloc}/'
+            if root not in out:
+                out.append(root)
+    return out
+
+
+def load_seeds(path='seed_sites.txt'):
+    targets = {}
+    if not os.path.exists(path):
+        return targets
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.split('#', 1)[0].strip()
+            if not line:
+                continue
+            if line.lower().startswith('dir:'):
+                for link in directory_links(line[4:].strip()):
+                    targets.setdefault(link, False)
+            else:
+                targets.setdefault(line if line.startswith('http') else 'https://' + line, False)
+    return targets
+
+
+def places_discover(api_key):
+    """Google Places (New) Text Search -> {website_root: True}. Requires billing enabled."""
+    start = datetime.date.today().toordinal() % len(PLACES_QUERIES)
+    queries = [PLACES_QUERIES[(start + i) % len(PLACES_QUERIES)] for i in range(PLACES_QUERIES_PER_RUN)]
+    headers = {'Content-Type': 'application/json', 'X-Goog-Api-Key': api_key,
+               'X-Goog-FieldMask': 'places.displayName,places.websiteUri,places.formattedAddress,nextPageToken'}
+    sites = {}
+    for q in queries:
+        token = None
+        for _ in range(3):
+            body = {'textQuery': q, 'pageSize': 20}
+            if token:
+                body['pageToken'] = token
+            try:
+                r = requests.post('https://places.googleapis.com/v1/places:searchText',
+                                  json=body, headers=headers, timeout=20)
+            except requests.RequestException as e:
+                print(f'Places error: {e}')
+                break
+            if r.status_code != 200:
+                print(f'Places HTTP {r.status_code}: {r.text[:200]}')
+                break
+            data = r.json()
+            for p in data.get('places', []):
+                site = p.get('websiteUri')
+                if site and 'brooklyn' in p.get('formattedAddress', '').lower():
+                    sites[f'{urlparse(site).scheme}://{urlparse(site).netloc}/'] = True
+            token = data.get('nextPageToken')
+            if not token:
+                break
+    print(f'Places discovery found {len(sites)} Brooklyn websites.')
+    return sites
+
+
+# ---------- main ----------
+def main():
+    today = datetime.date.today().isoformat()
+    rows = load_rows()
+    existing = {r['email'] for r in rows}
+
+    # 1) Backfill category/website for rows that don't have one yet
+    enriched = 0
+    for r in rows:
+        if r['category'] or enriched >= MAX_ENRICH_PER_RUN:
+            continue
+        domain = r['email'].split('@')[1]
+        site = r['website'] or ('' if domain in FREE_MAIL else f'https://{domain}/')
+        info = crawl_site(site, max_pages=1) if site else None
+        r['website'] = site
+        r['category'] = classify(info['strong'], info['body']) if info else 'Uncategorized'
+        enriched += 1
+        print(f"Categorized {r['company']}: {r['category']}")
+
+    # 2) Build crawl queue
+    targets = load_seeds()
+    key = os.environ.get('GOOGLE_PLACES_API_KEY')
+    if key:
+        for url, trusted in places_discover(key).items():
+            targets.setdefault(url, trusted)
+    known = {base_domain(r['email'].split('@')[1]) for r in rows} | {base_domain(r['website']) for r in rows if r['website']}
+    queue = []
+    for url, trusted in targets.items():
+        d = base_domain(url)
+        if d in known or d in SOCIAL:
+            continue
+        known.add(d)
+        queue.append((url, trusted))
+    queue = queue[:MAX_SITES_PER_RUN]
+
+    # 3) Crawl
+    scanned = failed = added = 0
+    for url, trusted in queue:
+        print(f'\nScanning {url}')
+        scanned += 1
+        info = crawl_site(url)
+        if info is None:
+            failed += 1
+            continue
+        if not (trusted or info['brooklyn']):
+            print('   - no Brooklyn signal, skipped')
+            continue
+        emails = pick_emails(info['emails'], url)
+        if not emails:
+            print('   - no usable emails')
+            continue
+        category = classify(info['strong'], info['body'])
+        for e in emails:
+            if e in existing:
+                continue
+            existing.add(e)
+            rows.append({'company': info['name'], 'first': '', 'last': '', 'email': e,
+                         'category': category, 'website': url, 'source': 'scraper',
+                         'date_added': today, 'sent_date': ''})
+            added += 1
+            print(f"   + {e} [{category}]")
+
+    save_rows(rows)
+    summary = (f'Scraper: {scanned} sites scanned, {failed} failed, {added} new leads, '
+               f'{enriched} existing rows categorized. Master now has {len(rows)} leads.')
+    print('\n' + summary)
+    if os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+            f.write(summary + '\n')
+    if scanned and failed == scanned:
+        sys.exit(1)  # everything failed: surface it in the workflow
 
 
 if __name__ == '__main__':
-  # Expanded list including Brooklyn mental health directories and practice networks
-  target_directories = [
-      'https://www.psychologytoday.com/us/therapists/new-york/brooklyn',
-      'https://www.brooklynminds.com',
-      'https://www.williamsburgtherapygroup.com',
-      'https://www.parkslopetherapy.com',
-      'https://www.brooklynpsychotherapy.com',
-      'https://www.cobblehilltherapy.com',
-  ]
-
-  all_discovered_leads = []
-
-  for url in target_directories:
-    leads = scrape_directory_page(url)
-    for lead in leads:
-      all_discovered_leads.append(lead)
-      print(
-          f"   └─ Discovered: {lead['email']} ({lead['company']})"
-      )
-
-  if all_discovered_leads:
-    append_to_master_csv(all_discovered_leads)
-  else:
-    print('\nNo new emails discovered during this run.')
+    main()

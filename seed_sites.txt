@@ -1,0 +1,7 @@
+# One clinic website per line. Prefix a directory/listing page with "dir:" and its
+# outbound links will be treated as candidate clinic sites.
+# Only add sites whose terms allow automated access (robots.txt is also checked).
+https://www.brooklynminds.com
+https://www.parkslopetherapy.com
+https://www.cobblehilltherapy.com
+# dir: https://example-directory.org/brooklyn-therapists
