@@ -5,7 +5,7 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import requests
 
-# Set user-agent to prevent requests from being blocked by standard web firewalls
+# Set user-agent to prevent requests from being blocked by web firewalls
 HEADERS = {
     'User-Agent': (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
@@ -17,7 +17,7 @@ HEADERS = {
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 
 # Keywords used to discover relevant contact pages on target websites
-CONTACT_KEYWORDS = ['contact', 'about', 'get-in-touch', 'team', 'staff']
+CONTACT_KEYWORDS = ['contact', 'about', 'get-in-touch', 'team', 'staff', 'reach']
 
 
 def extract_emails_from_url(url):
@@ -28,22 +28,25 @@ def extract_emails_from_url(url):
     if response.status_code != 200:
       return emails
 
-    soup = BeautifulSoup(response.text, 'html.parser')
-
-    # 1. Search text content using regex
+    # 1. Search raw text content using regex
     found_emails = re.findall(EMAIL_REGEX, response.text)
     for email in found_emails:
-      # Filter out common false-positive static asset extensions
-      if not email.lower().endswith(('.png', '.jpg', '.jpeg', '.svg', '.gif')):
-        emails.add(email.lower())
+      # Filter out common false-positive static asset extensions and placeholders
+      if not email.lower().endswith(
+          ('.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp', '.css', '.js')
+      ):
+        if 'example' not in email.lower() and 'domain' not in email.lower():
+          emails.add(email.lower())
 
     # 2. Search mailto: links explicitly in HTML
+    soup = BeautifulSoup(response.text, 'html.parser')
     for a_tag in soup.find_all('a', href=True):
       href = a_tag['href']
       if href.startswith('mailto:'):
         clean_email = href.replace('mailto:', '').split('?')[0].strip().lower()
         if re.match(EMAIL_REGEX, clean_email):
-          emails.add(clean_email)
+          if 'example' not in clean_email:
+            emails.add(clean_email)
 
   except Exception as e:
     print(f'   └─ Could not scan {url}: {e}')
@@ -66,7 +69,7 @@ def find_contact_pages(base_url, html_content):
       if any(keyword in href.lower() for keyword in CONTACT_KEYWORDS):
         contact_links.add(full_url)
 
-  return list(contact_links)[:3]  # Limit to top 3 matching contact pages
+  return list(contact_links)[:4]  # Limit to top 4 matching contact pages
 
 
 def scrape_clinic_website(website_url):
@@ -100,12 +103,13 @@ def append_to_master_csv(new_leads, filename='clinics_master.csv'):
 
   # Load existing emails to avoid adding duplicates
   if file_exists:
-    with open(filename, mode='r', encoding='utf-8') as f:
+    with open(filename, mode='r', encoding='utf-8-sig') as f:
       reader = csv.DictReader(f)
       for row in reader:
-        email = row.get('email', '').strip().lower()
-        if email:
-          existing_emails.add(email)
+        # Check standard fields flexibly
+        for val in row.values():
+          if val and '@' in val:
+            existing_emails.add(val.strip().lower())
 
   added_count = 0
   fieldnames = ['company', 'first', 'last', 'email']
@@ -113,7 +117,7 @@ def append_to_master_csv(new_leads, filename='clinics_master.csv'):
   with open(filename, mode='a', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames)
 
-    # Write header if starting a new CSV file
+    # Write header if starting a brand new CSV file
     if not file_exists or os.stat(filename).st_size == 0:
       writer.writeheader()
 
@@ -130,13 +134,25 @@ def append_to_master_csv(new_leads, filename='clinics_master.csv'):
   )
 
 
-# --- Example Execution Routine ---
 if __name__ == '__main__':
-  # Target list of candidate Brooklyn clinic websites to crawl
+  # Expanded list of Brooklyn mental health clinics and therapy practices
   target_websites = [
-      'https://www.brooklyncenterforchilddevelopment.com',
       'https://www.brooklynminds.com',
+      'https://www.williamsburgtherapygroup.com',
+      'https://www.brooklyncenterforchilddevelopment.com',
       'https://www.counselingcenterofbrooklyn.com',
+      'https://www.parkslopetherapy.com',
+      'https://www.brooklynpsychotherapy.com',
+      'https://www.cobblehilltherapy.com',
+      'https://www.dumbocounseling.com',
+      'https://www.atlanticpsychotherapy.com',
+      'https://www.greenpointpsychotherapy.com',
+      'https://www.brownstonetherapy.com',
+      'https://www.brooklynheightstherapy.com',
+      'https://www.prospectheightspsychotherapy.com',
+      'https://www.boerumhillpsychotherapy.com',
+      'https://www.sunsetparkcounseling.com',
+'https://www.psychologytoday.com'
   ]
 
   discovered_leads = []
@@ -144,9 +160,10 @@ if __name__ == '__main__':
   for site in target_websites:
     emails = scrape_clinic_website(site)
     if emails:
-      company_name = (
-          urlparse(site).netloc.replace('www.', '').split('.')[0].capitalize()
-      )
+      # Derive a clean company name from the domain URL
+      parsed_netloc = urlparse(site).netloc.replace('www.', '')
+      company_name = parsed_netloc.split('.')[0].capitalize()
+
       for email in emails:
         discovered_leads.append({
             'company': f'{company_name} Mental Health',
