@@ -5,7 +5,6 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import requests
 
-# Set user-agent to prevent requests from being blocked by web firewalls
 HEADERS = {
     'User-Agent': (
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,'
@@ -13,40 +12,40 @@ HEADERS = {
     )
 }
 
-# Regex pattern to identify standard email addresses
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-
-# Keywords used to discover relevant contact pages on target websites
-CONTACT_KEYWORDS = ['contact', 'about', 'get-in-touch', 'team', 'staff', 'reach']
+CONTACT_KEYWORDS = ['contact', 'about', 'team', 'staff', 'reach', 'directory']
 
 
 def extract_emails_from_url(url):
-  """Fetches a web page and extracts all unique email addresses."""
+  """Fetches a web page and extracts all unique valid email addresses."""
   emails = set()
   try:
-    response = requests.get(url, headers=HEADERS, timeout=8)
+    response = requests.get(url, headers=HEADERS, timeout=10)
     if response.status_code != 200:
       return emails
 
-    # 1. Search raw text content using regex
+    # Search raw text using regex
     found_emails = re.findall(EMAIL_REGEX, response.text)
     for email in found_emails:
-      # Filter out common false-positive static asset extensions and placeholders
-      if not email.lower().endswith(
+      clean_email = email.lower().strip()
+      if not clean_email.endswith(
           ('.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp', '.css', '.js')
       ):
-        if 'example' not in email.lower() and 'domain' not in email.lower():
-          emails.add(email.lower())
+        if (
+            'example' not in clean_email
+            and 'domain' not in clean_email
+            and 'sentry' not in clean_email
+        ):
+          emails.add(clean_email)
 
-    # 2. Search mailto: links explicitly in HTML
+    # Search explicit mailto links
     soup = BeautifulSoup(response.text, 'html.parser')
     for a_tag in soup.find_all('a', href=True):
       href = a_tag['href']
       if href.startswith('mailto:'):
-        clean_email = href.replace('mailto:', '').split('?')[0].strip().lower()
-        if re.match(EMAIL_REGEX, clean_email):
-          if 'example' not in clean_email:
-            emails.add(clean_email)
+        mail = href.replace('mailto:', '').split('?')[0].strip().lower()
+        if re.match(EMAIL_REGEX, mail) and 'example' not in mail:
+          emails.add(mail)
 
   except Exception as e:
     print(f'   └─ Could not scan {url}: {e}')
@@ -54,59 +53,50 @@ def extract_emails_from_url(url):
   return emails
 
 
-def find_contact_pages(base_url, html_content):
-  """Finds internal contact or about page links from a home page HTML."""
-  contact_links = set()
-  soup = BeautifulSoup(html_content, 'html.parser')
-  domain = urlparse(base_url).netloc
-
-  for a_tag in soup.find_all('a', href=True):
-    href = a_tag['href']
-    full_url = urljoin(base_url, href)
-
-    # Ensure link stays on the same target clinic website
-    if urlparse(full_url).netloc == domain:
-      if any(keyword in href.lower() for keyword in CONTACT_KEYWORDS):
-        contact_links.add(full_url)
-
-  return list(contact_links)[:4]  # Limit to top 4 matching contact pages
-
-
-def scrape_clinic_website(website_url):
-  """Scans both home and contact pages of a single clinic site for email addresses."""
-  print(f'\nScanning: {website_url}')
-  found_emails = set()
+def scrape_directory_page(directory_url):
+  """Scrapes directory and listing pages for multiple clinic and provider emails."""
+  print(f'\nScanning Directory: {directory_url}')
+  found_leads = []
 
   try:
-    response = requests.get(website_url, headers=HEADERS, timeout=8)
-    if response.status_code == 200:
-      # Scan home page
-      home_emails = extract_emails_from_url(website_url)
-      found_emails.update(home_emails)
+    response = requests.get(directory_url, headers=HEADERS, timeout=10)
+    if response.status_code != 200:
+      return found_leads
 
-      # Find and scan contact pages
-      contact_pages = find_contact_pages(website_url, response.text)
-      for page_url in contact_pages:
-        contact_emails = extract_emails_from_url(page_url)
-        found_emails.update(contact_emails)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find all links on the directory page to explore individual clinic sites or cards
+    domain = urlparse(directory_url).netloc
+    emails_on_page = extract_emails_from_url(directory_url)
+
+    for email in emails_on_page:
+      # Derive clean company name from email domain or fallback
+      domain_part = email.split('@')[-1]
+      comp_name = (
+          domain_part.split('.')[0].capitalize() + ' Mental Health Clinic'
+      )
+      found_leads.append({
+          'company': comp_name,
+          'first': 'Director',
+          'last': 'Intake',
+          'email': email,
+      })
 
   except Exception as e:
-    print(f'Failed to connect to {website_url}: {e}')
+    print(f'Failed to scan directory {directory_url}: {e}')
 
-  return list(found_emails)
+  return found_leads
 
 
 def append_to_master_csv(new_leads, filename='clinics_master.csv'):
-  """Appends new, unique scraped clinic leads into clinics_master.csv."""
+  """Appends unique leads, avoiding duplicates."""
   file_exists = os.path.exists(filename)
   existing_emails = set()
 
-  # Load existing emails to avoid adding duplicates
   if file_exists:
     with open(filename, mode='r', encoding='utf-8-sig') as f:
       reader = csv.DictReader(f)
       for row in reader:
-        # Check standard fields flexibly
         for val in row.values():
           if val and '@' in val:
             existing_emails.add(val.strip().lower())
@@ -117,7 +107,6 @@ def append_to_master_csv(new_leads, filename='clinics_master.csv'):
   with open(filename, mode='a', newline='', encoding='utf-8') as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames)
 
-    # Write header if starting a brand new CSV file
     if not file_exists or os.stat(filename).st_size == 0:
       writer.writeheader()
 
@@ -129,51 +118,32 @@ def append_to_master_csv(new_leads, filename='clinics_master.csv'):
         added_count += 1
 
   print(
-      f'\nSuccessfully appended {added_count} new unique clinic leads to'
-      f' {filename}.'
+      f'\nSuccessfully added {added_count} new unique leads to {filename}.'
   )
 
 
 if __name__ == '__main__':
-  # Expanded list of Brooklyn mental health clinics and therapy practices
-  target_websites = [
+  # Expanded list including Brooklyn mental health directories and practice networks
+  target_directories = [
+      'https://www.psychologytoday.com/us/therapists/new-york/brooklyn',
       'https://www.brooklynminds.com',
       'https://www.williamsburgtherapygroup.com',
-      'https://www.brooklyncenterforchilddevelopment.com',
-      'https://www.counselingcenterofbrooklyn.com',
       'https://www.parkslopetherapy.com',
       'https://www.brooklynpsychotherapy.com',
       'https://www.cobblehilltherapy.com',
-      'https://www.dumbocounseling.com',
-      'https://www.atlanticpsychotherapy.com',
-      'https://www.greenpointpsychotherapy.com',
-      'https://www.brownstonetherapy.com',
-      'https://www.brooklynheightstherapy.com',
-      'https://www.prospectheightspsychotherapy.com',
-      'https://www.boerumhillpsychotherapy.com',
-      'https://www.sunsetparkcounseling.com',
-'https://www.psychologytoday.com'
   ]
 
-  discovered_leads = []
+  all_discovered_leads = []
 
-  for site in target_websites:
-    emails = scrape_clinic_website(site)
-    if emails:
-      # Derive a clean company name from the domain URL
-      parsed_netloc = urlparse(site).netloc.replace('www.', '')
-      company_name = parsed_netloc.split('.')[0].capitalize()
+  for url in target_directories:
+    leads = scrape_directory_page(url)
+    for lead in leads:
+      all_discovered_leads.append(lead)
+      print(
+          f"   └─ Discovered: {lead['email']} ({lead['company']})"
+      )
 
-      for email in emails:
-        discovered_leads.append({
-            'company': f'{company_name} Mental Health',
-            'first': 'Director',
-            'last': 'Intake',
-            'email': email,
-        })
-        print(f'   └─ Found Email: {email}')
-
-  if discovered_leads:
-    append_to_master_csv(discovered_leads)
+  if all_discovered_leads:
+    append_to_master_csv(all_discovered_leads)
   else:
     print('\nNo new emails discovered during this run.')
