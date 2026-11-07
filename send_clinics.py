@@ -6,52 +6,59 @@ from email.mime.text import MIMEText
 import smtplib
 
 
+def get_field_value(row, possible_keys):
+  """Utility to match flexible CSV headers (case-insensitive)."""
+  for key in possible_keys:
+    for csv_header in row.keys():
+      if csv_header and csv_header.strip().lower() == key.lower():
+        return row[csv_header].strip()
+  return ''
+
+
 def load_clinics_from_csv(filename='clinics_master.csv'):
-  """Loads the master clinic list dynamically from a CSV file with duplicate filtering."""
+  """Loads the master clinic list dynamically from a CSV file with flexible headers and duplicate filtering."""
   clinics = []
   seen_emails = set()
 
   if not os.path.exists(filename):
-    print(
-        f"Error: The file '{filename}' was not found. Please ensure it is in"
-        ' your repository root.'
-    )
+    print(f"Error: The file '{filename}' was not found.")
     return []
 
   try:
-    with open(filename, mode='r', encoding='utf-8') as file:
+    with open(filename, mode='r', encoding='utf-8-sig') as file:
       reader = csv.DictReader(file)
       for row_num, row in enumerate(reader, start=2):
-        email = row.get('email', '').strip().lower()
-        company = row.get('company', '').strip()
-        first = row.get('first', '').strip()
-        last = row.get('last', '').strip()
+        email = get_field_value(row, ['email', 'email address', 'email_address'])
+        company = get_field_value(
+            row, ['company', 'name of company', 'company name', 'clinic']
+        )
+        first = get_field_value(row, ['first', 'first name', 'first_name'])
+        last = get_field_value(row, ['last', 'last name', 'last_name'])
 
         if not email:
-          print(f'Warning: Skipping row {row_num} ({company}) - missing email.')
-          continue
-
-        if email in seen_emails:
           print(
-              f'Notice: Filtered out duplicate email entry: {email} (Row'
-              f' {row_num})'
+              f'Warning: Skipping row {row_num} ({company or "Unknown"}) -'
+              ' missing email.'
           )
           continue
 
-        seen_emails.add(email)
+        email_clean = email.lower()
+        if email_clean in seen_emails:
+          print(f'Notice: Filtered duplicate email: {email_clean} (Row {row_num})')
+          continue
+
+        seen_emails.add(email_clean)
         clinics.append({
-            'company': company,
-            'first': first,
-            'last': last,
-            'email': row.get('email', '').strip(),
+            'company': company or 'N/A',
+            'first': first or 'N/A',
+            'last': last or 'N/A',
+            'email': email,
         })
 
     print(f'Successfully loaded {len(clinics)} unique clinics from {filename}.')
 
-  except csv.Error as e:
-    print(f'CSV Parsing Error in {filename} at line {e.line_num}: {e}')
   except Exception as e:
-    print(f'Unexpected error while reading {filename}: {e}')
+    print(f'Error while reading {filename}: {e}')
 
   return clinics
 
@@ -66,7 +73,6 @@ def get_daily_clinics(pool, batch_size=60):
   batch = []
 
   actual_batch_size = min(batch_size, len(pool))
-
   for i in range(actual_batch_size):
     idx = (start_idx + i) % len(pool)
     batch.append(pool[idx])
@@ -79,26 +85,36 @@ def generate_html_table(clinics):
     return '<p>No clinics available to display for today.</p>'
 
   html = """
-    <h2>Your Daily Brooklyn Mental Health Clinics Directory</h2>
-    <p>Here is your fresh batch of verified clinics for today:</p>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px;">
-      <tr style="background-color: #f2f2f2;">
-        <th>Name of Company</th>
-        <th>First name</th>
-        <th>Last name</th>
-        <th>Email address</th>
-      </tr>
-    """
+  <html>
+    <body>
+      <h2>Your Daily Brooklyn Mental Health Clinics Directory</h2>
+      <p>Here is your fresh batch of verified clinics for today:</p>
+      <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px; width: 100%;">
+        <thead>
+          <tr style="background-color: #f2f2f2; text-align: left;">
+            <th style="padding: 8px; border: 1px solid #ddd;">Name of Company</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">First name</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Last name</th>
+            <th style="padding: 8px; border: 1px solid #ddd;">Email address</th>
+          </tr>
+        </thead>
+        <tbody>
+  """
   for c in clinics:
     html += f"""
-      <tr>
-        <td>{c['company']}</td>
-        <td>{c['first']}</td>
-        <td>{c['last']}</td>
-        <td><a href="mailto:{c['email']}">{c['email']}</a></td>
-      </tr>
-        """
-  html += '</table>'
+          <tr>
+            <td style="padding: 8px; border: 1px solid #ddd;">{c['company']}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{c['first']}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;">{c['last']}</td>
+            <td style="padding: 8px; border: 1px solid #ddd;"><a href="mailto:{c['email']}">{c['email']}</a></td>
+          </tr>
+    """
+  html += """
+        </tbody>
+      </table>
+    </body>
+  </html>
+  """
   return html
 
 
@@ -108,15 +124,12 @@ def send_email():
   recipient_email = os.environ.get('RECIPIENT_EMAIL')
 
   if not sender_email or not sender_password or not recipient_email:
-    print(
-        'Error: Missing required environment variables (EMAIL_USER,'
-        ' EMAIL_PASSWORD, or RECIPIENT_EMAIL).'
-    )
+    print('Error: Missing required environment variables.')
     return
 
   master_pool = load_clinics_from_csv('clinics_master.csv')
   if not master_pool:
-    print('Error: Master clinic pool is empty or invalid. Aborting execution.')
+    print('Error: Master clinic pool is empty or invalid.')
     return
 
   clinics = get_daily_clinics(master_pool, 60)
@@ -136,15 +149,8 @@ def send_email():
       server.login(sender_email, sender_password)
       server.sendmail(sender_email, recipient_email, msg.as_string())
     print('Daily clinic email sent successfully!')
-  except smtplib.SMTPAuthenticationError:
-    print(
-        'SMTP Authentication Error: Failed to login. Please verify your'
-        ' EMAIL_USER and Gmail App Password.'
-    )
-  except smtplib.SMTPException as e:
-    print(f'An SMTP error occurred while sending the email: {e}')
   except Exception as e:
-    print(f'An unexpected error occurred during email transmission: {e}')
+    print(f'Error sending email: {e}')
 
 
 if __name__ == '__main__':
