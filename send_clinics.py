@@ -81,33 +81,32 @@ def get_daily_clinics(pool, batch_size=60)
   return batch
 
 
-def generate_html_table(clinics)
-  if not clinics
-    return 'pNo clinics available to display for today.p'
+def generate_html_table(clinics):
+  if not clinics:
+    return "<p>No clinics available to display for today.</p>"
 
-  html = 
-    h2Your Daily Brooklyn Mental Health Clinics Directoryh2
-    pHere is your fresh batch of verified clinics for todayp
-    table border=1 cellpadding=8 cellspacing=0 style=border-collapse collapse; font-family Arial, sans-serif; font-size 14px;
-      tr style=background-color #f2f2f2;
-        thName of Companyth
-        thFirst nameth
-        thLast nameth
-        thEmail addressth
-      tr
-    
-  for c in clinics
-    html += f
-      tr
-        td{c['company']}td
-        td{c['first']}td
-        td{c['last']}td
-        tda href=mailto{c['email']}{c['email']}atd
-      tr
-        
-  html += 'table'
+  html = """
+    <h2>Your Daily Brooklyn Mental Health Clinics Directory</h2>
+    <p>Here is your fresh batch of verified clinics for today:</p>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px;">
+      <tr style="background-color: #f2f2f2;">
+        <th>Name of Company</th>
+        <th>First name</th>
+        <th>Last name</th>
+        <th>Email address</th>
+      </tr>
+    """
+  for c in clinics:
+    html += f"""
+      <tr>
+        <td>{c['company']}</td>
+        <td>{c['first']}</td>
+        <td>{c['last']}</td>
+        <td><a href="mailto:{c['email']}">{c['email']}</a></td>
+      </tr>
+        """
+  html += "</table>"
   return html
-
 
 def send_email()
   # Retrieve environment secrets with validation
