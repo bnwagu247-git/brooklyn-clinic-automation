@@ -1,22 +1,22 @@
 company,first,last,email,category,website,source,date_added,sent_date
-Institute for Community Living (ICL),General,Support,iclhope@iclinc.org,Community & Nonprofit Behavioral Health,https://iclinc.org/,manual,,
-Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org,Uncategorized,https://cbhsny.org/,manual,,
-Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com,Trauma & PTSD,https://lifeinprogresscounseling.com/,manual,,
-SIMHA Health,Office,Team,office@simhahealth.org,Community & Nonprofit Behavioral Health,https://simhahealth.org/,manual,,
-Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com,Psychiatry & Medication Management,https://amaehealth.com/,manual,,
-Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.org,Psychotherapy & Counseling,https://brooklynpsychotherapy.org/,manual,,
-Williamsburg Therapy Group,,,info@williamsburgtherapygroup.com,Psychotherapy & Counseling,https://williamsburgtherapygroup.com/,manual,,
-Samaritan Daytop Village,,,admissions@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,
-Samaritan Daytop Village,,,aloysius.joseph@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,
-Samaritan Daytop Village,,,communications@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,
-BMH Consulting,,,info@bmhmindandbody.com,Psychiatry & Medication Management,https://bmhmindandbody.com/,scraper,2026-11-08,
-Brooklyn Mindful,,,brooklynmindful@gmail.com,Psychotherapy & Counseling,https://brooklynmindful.com/,scraper,2026-11-08,
-Hima Acupuncture,,,snow@himaacupuncture.com,Uncategorized,http://www.himaacupuncture.com/,scraper,2026-11-08,
-IDCC,,,info@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,
-IDCC,,,connectreferralsch@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,
-IDCC,,,connectreferralswb@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,
-Psychobabble Therapy and Wellness,,,info@psychobabbletherapyandwellness.com,Psychotherapy & Counseling,http://www.psychobabbletherapyandwellness.com/,scraper,2026-11-08,
-Mind Matters Psychotherapy,,,michelekleiman@gmail.com,Psychotherapy & Counseling,https://www.mindmattersmk.com/,scraper,2026-11-08,
-Park Slope Therapy,,,admin@pstherapyny.com,Psychotherapy & Counseling,https://www.pstherapyny.com/,scraper,2026-11-08,
-ABS Mental Health,,,emmascott@gmail.com,Substance Use & Addiction,https://absmentalhealth.com/,scraper,2026-11-08,
-SOL Mental Health,,,info@solmentalhealth.com,Psychiatry & Medication Management,https://www.solmentalhealth.com/,scraper,2026-11-08,
+Institute for Community Living (ICL),General,Support,iclhope@iclinc.org,Community & Nonprofit Behavioral Health,https://iclinc.org/,manual,,2026-11-08
+Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org,Uncategorized,https://cbhsny.org/,manual,,2026-11-08
+Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com,Trauma & PTSD,https://lifeinprogresscounseling.com/,manual,,2026-11-08
+SIMHA Health,Office,Team,office@simhahealth.org,Community & Nonprofit Behavioral Health,https://simhahealth.org/,manual,,2026-11-08
+Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com,Psychiatry & Medication Management,https://amaehealth.com/,manual,,2026-11-08
+Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.org,Psychotherapy & Counseling,https://brooklynpsychotherapy.org/,manual,,2026-11-08
+Williamsburg Therapy Group,,,info@williamsburgtherapygroup.com,Psychotherapy & Counseling,https://williamsburgtherapygroup.com/,manual,,2026-11-08
+Samaritan Daytop Village,,,admissions@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,2026-11-08
+Samaritan Daytop Village,,,aloysius.joseph@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,2026-11-08
+Samaritan Daytop Village,,,communications@samaritanvillage.org,Substance Use & Addiction,https://samaritanvillage.org,scraper,2026-11-08,2026-11-08
+BMH Consulting,,,info@bmhmindandbody.com,Psychiatry & Medication Management,https://bmhmindandbody.com/,scraper,2026-11-08,2026-11-08
+Brooklyn Mindful,,,brooklynmindful@gmail.com,Psychotherapy & Counseling,https://brooklynmindful.com/,scraper,2026-11-08,2026-11-08
+Hima Acupuncture,,,snow@himaacupuncture.com,Uncategorized,http://www.himaacupuncture.com/,scraper,2026-11-08,2026-11-08
+IDCC,,,info@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,2026-11-08
+IDCC,,,connectreferralsch@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,2026-11-08
+IDCC,,,connectreferralswb@interborough.org,Community & Nonprofit Behavioral Health,http://www.interborough.org/,scraper,2026-11-08,2026-11-08
+Psychobabble Therapy and Wellness,,,info@psychobabbletherapyandwellness.com,Psychotherapy & Counseling,http://www.psychobabbletherapyandwellness.com/,scraper,2026-11-08,2026-11-08
+Mind Matters Psychotherapy,,,michelekleiman@gmail.com,Psychotherapy & Counseling,https://www.mindmattersmk.com/,scraper,2026-11-08,2026-11-08
+Park Slope Therapy,,,admin@pstherapyny.com,Psychotherapy & Counseling,https://www.pstherapyny.com/,scraper,2026-11-08,2026-11-08
+ABS Mental Health,,,emmascott@gmail.com,Substance Use & Addiction,https://absmentalhealth.com/,scraper,2026-11-08,2026-11-08
+SOL Mental Health,,,info@solmentalhealth.com,Psychiatry & Medication Management,https://www.solmentalhealth.com/,scraper,2026-11-08,2026-11-08
