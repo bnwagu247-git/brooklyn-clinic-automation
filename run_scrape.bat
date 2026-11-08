@@ -20,7 +20,7 @@ if exist crawl_log.csv git add crawl_log.csv
 git diff --cached --quiet
 if errorlevel 1 (
   git commit -m "Local scrape: update leads database [skip ci]"
-  git pull origin main --rebase
+  git pull origin main --rebase --autostash
   git push origin main
 ) else (
   echo No changes to save.
