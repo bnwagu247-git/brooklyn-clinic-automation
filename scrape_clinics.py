@@ -274,7 +274,7 @@ def places_discover(api_key):
 
 OPEN_BASE = 'https://api.openplacesapi.com'
 BROOKLYN_CENTER = (40.65, -73.95)
-OPEN_MAX_PAGES = 6  # up to 300 places per category per run
+OPEN_MAX_PAGES = 20  # API maximum: offset + limit <= 1000 (up to 1,000 places per category)
 OPEN_TERMS = ['mental health', 'psychologist', 'psychiatrist', 'counseling',
               'psychotherapy', 'substance abuse', 'addiction treatment']
 
