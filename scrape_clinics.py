@@ -44,7 +44,8 @@ JUNK_DOMAINS = {'example.com', 'domain.com', 'email.com', 'yoursite.com', 'sentr
 FREE_MAIL = {'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com',
              'icloud.com', 'protonmail.com', 'me.com'}
 SOCIAL = {'facebook.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com',
-          'youtube.com', 'tiktok.com', 'google.com', 'yelp.com', 'apple.com', 'wa.me'}
+          'youtube.com', 'tiktok.com', 'google.com', 'yelp.com', 'apple.com', 'wa.me',
+          'psychologytoday.com', 'zocdoc.com', 'healthgrades.com', 'linktr.ee', 'goodtherapy.org'}
 GENERIC_LOCALS = {'info', 'contact', 'hello', 'office', 'intake', 'admin', 'admissions',
                   'appointments', 'frontdesk', 'inquiries', 'care', 'support', 'help', 'team'}
 
@@ -270,6 +271,62 @@ def places_discover(api_key):
     return sites
 
 
+
+OPEN_BASE = 'https://api.openplacesapi.com'
+BROOKLYN_CENTER = (40.65, -73.95)
+OPEN_TERMS = ['mental health', 'psychologist', 'psychiatrist', 'counseling',
+              'psychotherapy', 'substance abuse', 'addiction treatment']
+
+
+def open_places_discover(api_key):
+    """Open Places API (openplacesapi.com): browse mental-health categories around Brooklyn.
+    Returns {website_root: trusted_brooklyn}. Free plan: 10,000 calls/month, no card.
+    Set OPEN_PLACES_CATEGORIES="slug1,slug2" to override the automatic category lookup."""
+    cats = [c.strip() for c in os.environ.get('OPEN_PLACES_CATEGORIES', '').split(',') if c.strip()]
+    if not cats:
+        for term in OPEN_TERMS:  # /v1/categories is public and does not count against quota
+            try:
+                r = requests.get(f'{OPEN_BASE}/v1/categories', params={'q': term, 'limit': 1}, timeout=20)
+                found = r.json().get('categories', []) if r.status_code == 200 else []
+            except (requests.RequestException, ValueError):
+                found = []
+            if found and found[0]['category'] not in cats:
+                cats.append(found[0]['category'])
+    print(f'Open Places categories: {cats}')
+    # rotate through the first 1,000 places per category over 10 days (2 pages of 50 per run)
+    start = (datetime.date.today().toordinal() % 10) * 100
+    headers = {'Authorization': f'Bearer {api_key}'}
+    sites = {}
+    for cat in cats:
+        for offset in (start, start + 50):
+            params = {'category': cat, 'lat': BROOKLYN_CENTER[0], 'lon': BROOKLYN_CENTER[1],
+                      'radius_mi': 10, 'limit': 50, 'offset': offset,
+                      'sort': 'distance', 'min_confidence': 0.5}
+            try:
+                r = requests.get(f'{OPEN_BASE}/v1/places', params=params, headers=headers, timeout=30)
+            except requests.RequestException as e:
+                print(f'Open Places error: {e}')
+                break
+            if r.status_code != 200:
+                print(f'Open Places HTTP {r.status_code}: {r.text[:200]}')
+                break
+            results = r.json().get('results', [])
+            for p in results:
+                site = p.get('website')
+                loc = ((p.get('address') or {}).get('locality') or '').lower()
+                if not site or p.get('operating_status') not in (None, 'operational'):
+                    continue
+                if loc and loc not in ('brooklyn', 'new york', 'new york city', 'nyc'):
+                    continue
+                parsed = urlparse(site if '//' in site else '//' + site)
+                root = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
+                sites[root] = sites.get(root, False) or loc == 'brooklyn'
+            if len(results) < 50:
+                break
+    print(f'Open Places found {len(sites)} candidate websites.')
+    return sites
+
+
 # ---------- main ----------
 def main():
     today = datetime.date.today().isoformat()
@@ -300,6 +357,10 @@ def main():
     key = os.environ.get('GOOGLE_PLACES_API_KEY')
     if key:
         for url, trusted in places_discover(key).items():
+            targets.setdefault(url, trusted)
+    okey = os.environ.get('OPEN_PLACES_API_KEY')
+    if okey:
+        for url, trusted in open_places_discover(okey).items():
             targets.setdefault(url, trusted)
     known = {base_domain(r['email'].split('@')[1]) for r in rows} | {base_domain(r['website']) for r in rows if r['website']}
     queue = []
