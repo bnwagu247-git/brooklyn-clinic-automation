@@ -1,8 +1,8 @@
 company,first,last,email,category,website,source,date_added,sent_date
-Institute for Community Living (ICL),General,Support,iclhope@iclinc.org,Community & Nonprofit Behavioral Health,https://iclinc.org/,manual,,2026-11-08
-Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org,Uncategorized,https://cbhsny.org/,manual,,2026-11-08
-Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com,Trauma & PTSD,https://lifeinprogresscounseling.com/,manual,,2026-11-08
-SIMHA Health,Office,Team,office@simhahealth.org,Community & Nonprofit Behavioral Health,https://simhahealth.org/,manual,,2026-11-08
-Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com,Psychiatry & Medication Management,https://amaehealth.com/,manual,,2026-11-08
-Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.org,Psychotherapy & Counseling,https://brooklynpsychotherapy.org/,manual,,2026-11-08
-Williamsburg Therapy Group,,,info@williamsburgtherapygroup.com,Psychotherapy & Counseling,https://williamsburgtherapygroup.com/,manual,,2026-11-08
+Institute for Community Living (ICL),General,Support,iclhope@iclinc.org,,,manual,,
+Center for Behavioral Health Services,Administrative,Contact,contact@cbhsny.org,,,manual,,
+Life in Progress Mental Health,Intake,Office,info@lifeinprogresscounseling.com,,,manual,,
+SIMHA Health,Office,Team,office@simhahealth.org,,,manual,,
+Amae Health Brooklyn,Boris,Ingberg,hello@amaehealth.com,,,manual,,
+Brooklyn Psychotherapy,Karen,Costa,info@brooklynpsychotherapy.org,,,manual,,
+Williamsburg Therapy Group,,,info@williamsburgtherapygroup.com,,,manual,,

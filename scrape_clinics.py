@@ -19,7 +19,14 @@ from bs4 import BeautifulSoup
 from clinic_store import EMAIL_RE, classify, load_rows, save_rows
 
 BOT_NAME = 'BrooklynLeadsBot'
-HEADERS = {'User-Agent': f'{BOT_NAME}/1.0 (small-scale lead research)'}
+HEADERS = {
+    'User-Agent': os.environ.get('SCRAPER_USER_AGENT') or (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/124.0.0.0 Safari/537.36'),
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+FAILURES = []  # (url, reason) collected for the end-of-run summary
 DELAY = 1.0
 TIMEOUT = 12
 MAX_PAGES_PER_SITE = 4
@@ -83,15 +90,18 @@ def allowed(url):
 def fetch_soup(url):
     if not allowed(url):
         print(f'   x {url}: disallowed by robots.txt')
+        FAILURES.append((url, 'blocked by robots.txt'))
         return None
     time.sleep(DELAY)
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
     except requests.RequestException as e:
         print(f'   x {url}: {e}')
+        FAILURES.append((url, type(e).__name__ + ': ' + str(e)[:120]))
         return None
     if r.status_code != 200 or 'html' not in r.headers.get('Content-Type', ''):
         print(f'   x {url}: HTTP {r.status_code}')
+        FAILURES.append((url, f'HTTP {r.status_code}'))
         return None
     return BeautifulSoup(r.text, 'html.parser')
 
@@ -275,7 +285,13 @@ def main():
         site = r['website'] or ('' if domain in FREE_MAIL else f'https://{domain}/')
         info = crawl_site(site, max_pages=1) if site else None
         r['website'] = site
-        r['category'] = classify(info['strong'], info['body']) if info else 'Uncategorized'
+        if not site:
+            r['category'] = 'Uncategorized'
+            continue
+        if info is None:
+            print(f"Could not load {site or r['email']}; will retry next run")
+            continue
+        r['category'] = classify(info['strong'], info['body'])
         enriched += 1
         print(f"Categorized {r['company']}: {r['category']}")
 
@@ -325,6 +341,8 @@ def main():
     save_rows(rows)
     summary = (f'Scraper: {scanned} sites scanned, {failed} failed, {added} new leads, '
                f'{enriched} existing rows categorized. Master now has {len(rows)} leads.')
+    if FAILURES:
+        summary += '\nFailures:\n' + '\n'.join(f'  - {u}: {why}' for u, why in FAILURES[:20])
     print('\n' + summary)
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
