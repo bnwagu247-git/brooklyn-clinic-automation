@@ -44,6 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add clinics_master.csv
+          [ -f crawl_log.csv ] && git add crawl_log.csv || true
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

@@ -16,6 +16,7 @@ python scrape_clinics.py
 echo.
 echo === Saving results to GitHub ===
 git add clinics_master.csv
+if exist crawl_log.csv git add crawl_log.csv
 git diff --cached --quiet
 if errorlevel 1 (
   git commit -m "Local scrape: update leads database [skip ci]"

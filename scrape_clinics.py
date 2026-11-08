@@ -274,6 +274,7 @@ def places_discover(api_key):
 
 OPEN_BASE = 'https://api.openplacesapi.com'
 BROOKLYN_CENTER = (40.65, -73.95)
+OPEN_MAX_PAGES = 6  # up to 300 places per category per run
 OPEN_TERMS = ['mental health', 'psychologist', 'psychiatrist', 'counseling',
               'psychotherapy', 'substance abuse', 'addiction treatment']
 
@@ -293,14 +294,13 @@ def open_places_discover(api_key):
             if found and found[0]['category'] not in cats:
                 cats.append(found[0]['category'])
     print(f'Open Places categories: {cats}')
-    # rotate through the first 1,000 places per category over 10 days (2 pages of 50 per run)
-    start = (datetime.date.today().toordinal() % 10) * 100
     headers = {'Authorization': f'Bearer {api_key}'}
     sites = {}
     for cat in cats:
-        for offset in (start, start + 50):
+        seen = with_site = kept = 0
+        for page in range(OPEN_MAX_PAGES):
             params = {'category': cat, 'lat': BROOKLYN_CENTER[0], 'lon': BROOKLYN_CENTER[1],
-                      'radius_mi': 10, 'limit': 50, 'offset': offset,
+                      'radius_mi': 10, 'limit': 50, 'offset': page * 50,
                       'sort': 'distance', 'min_confidence': 0.5}
             try:
                 r = requests.get(f'{OPEN_BASE}/v1/places', params=params, headers=headers, timeout=30)
@@ -311,21 +311,57 @@ def open_places_discover(api_key):
                 print(f'Open Places HTTP {r.status_code}: {r.text[:200]}')
                 break
             results = r.json().get('results', [])
+            seen += len(results)
             for p in results:
                 site = p.get('website')
-                loc = ((p.get('address') or {}).get('locality') or '').lower()
                 if not site or p.get('operating_status') not in (None, 'operational'):
                     continue
+                with_site += 1
+                loc = ((p.get('address') or {}).get('locality') or '').lower()
                 if loc and loc not in ('brooklyn', 'new york', 'new york city', 'nyc'):
                     continue
                 parsed = urlparse(site if '//' in site else '//' + site)
                 root = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
+                if root not in sites:
+                    kept += 1
                 sites[root] = sites.get(root, False) or loc == 'brooklyn'
             if len(results) < 50:
                 break
+        print(f'  {cat}: {seen} places, {with_site} with a website, {kept} new candidates')
     print(f'Open Places found {len(sites)} candidate websites.')
     return sites
 
+
+
+CRAWL_LOG = 'crawl_log.csv'
+RECRAWL_DAYS = 14
+
+
+def load_crawl_log():
+    log = {}
+    if os.path.exists(CRAWL_LOG):
+        with open(CRAWL_LOG, encoding='utf-8') as f:
+            for line in f:
+                parts = line.strip().split(',')
+                if len(parts) == 2:
+                    log[parts[0]] = parts[1]
+    return log
+
+
+def save_crawl_log(log):
+    with open(CRAWL_LOG, 'w', encoding='utf-8', newline='') as f:
+        for domain, day in sorted(log.items()):
+            f.write(f'{domain},{day}\n')
+
+
+def recently_crawled(log, domain):
+    day = log.get(domain)
+    if not day:
+        return False
+    try:
+        return (datetime.date.today() - datetime.date.fromisoformat(day)).days < RECRAWL_DAYS
+    except ValueError:
+        return False
 
 # ---------- main ----------
 def main():
@@ -363,13 +399,15 @@ def main():
         for url, trusted in open_places_discover(okey).items():
             targets.setdefault(url, trusted)
     known = {base_domain(r['email'].split('@')[1]) for r in rows} | {base_domain(r['website']) for r in rows if r['website']}
+    crawl_log = load_crawl_log()
     queue = []
     for url, trusted in targets.items():
         d = base_domain(url)
-        if d in known or d in SOCIAL:
+        if d in known or d in SOCIAL or recently_crawled(crawl_log, d):
             continue
         known.add(d)
         queue.append((url, trusted))
+    queue.sort(key=lambda item: not item[1])  # Brooklyn-confirmed sites first
     queue = queue[:MAX_SITES_PER_RUN]
 
     # 3) Crawl
@@ -377,6 +415,7 @@ def main():
     for url, trusted in queue:
         print(f'\nScanning {url}')
         scanned += 1
+        crawl_log[base_domain(url)] = today
         info = crawl_site(url)
         if info is None:
             failed += 1
@@ -400,6 +439,7 @@ def main():
             print(f"   + {e} [{category}]")
 
     save_rows(rows)
+    save_crawl_log(crawl_log)
     summary = (f'Scraper: {scanned} sites scanned, {failed} failed, {added} new leads, '
                f'{enriched} existing rows categorized. Master now has {len(rows)} leads.')
     if FAILURES:
